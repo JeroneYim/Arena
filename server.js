@@ -68,7 +68,7 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Proxy endpoint
+// Proxy endpoint with better headers
 app.use('/proxy', createProxyMiddleware({
   target: TARGET_URL,
   changeOrigin: true,
@@ -76,12 +76,29 @@ app.use('/proxy', createProxyMiddleware({
     '^/proxy': '',
   },
   ws: true,
+  followRedirects: true,
   onProxyReq: (proxyReq, req, res) => {
-    proxyReq.setHeader('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
+    // Remove headers that might identify this as a proxy
+    proxyReq.removeHeader('x-forwarded-for');
+    proxyReq.removeHeader('x-forwarded-proto');
+    proxyReq.removeHeader('x-forwarded-host');
+    
+    // Set legitimate-looking headers
+    proxyReq.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    proxyReq.setHeader('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8');
+    proxyReq.setHeader('Accept-Language', 'en-US,en;q=0.5');
+    proxyReq.setHeader('Accept-Encoding', 'gzip, deflate, br');
+    proxyReq.setHeader('Cache-Control', 'no-cache');
+    proxyReq.setHeader('Pragma', 'no-cache');
   },
   onProxyRes: (proxyRes, req, res) => {
     delete proxyRes.headers['x-frame-options'];
     delete proxyRes.headers['content-security-policy'];
+    
+    // Handle Cloudflare challenges
+    if (proxyRes.statusCode === 403 || proxyRes.statusCode === 503) {
+      proxyRes.headers['content-type'] = 'text/html';
+    }
   },
 }));
 
